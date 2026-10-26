@@ -99,13 +99,20 @@ table{width:100%;border-collapse:collapse}td,th{padding:5px 8px;text-align:left;
 .big-num{font-size:34px;font-weight:800;color:var(--acc)}
 .res{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin:10px 0}.res div{display:flex;justify-content:space-between;border-bottom:1px solid #22315a;padding:3px 0}
 .btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:12px}
+#vig{position:fixed;inset:0;pointer-events:none;z-index:9;box-shadow:inset 0 0 120px 30px #ff1f3a;opacity:0;transition:opacity .25s}
+#vig.on{animation:vig 1s infinite}@keyframes vig{50%{filter:brightness(1.6)}}
+#tut{position:absolute;left:50%;top:84px;transform:translateX(-50%);background:#0b1226ee;border:2px solid var(--acc);border-radius:12px;padding:8px 14px;width:min(420px,92vw);pointer-events:auto}
+#tut div{padding:2px 0;color:var(--mut)}#tut div.cur{color:var(--ink);font-weight:700}#tut div.ok{color:var(--grn)}
+#tut button{margin-top:6px;padding:3px 12px;font-size:13px}
 @media(max-width:560px){#hudR{width:110px}#mini{width:100px;height:100px}#lb{font-size:10px}.res{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 
+<div id="vig"></div>
 <div id="hud" class="hide">
+  <div id="tut" class="hide"></div>
   <div id="hudL">
     <div id="stName">Egg</div>
     <div class="bar xp"><i id="xpFill"></i><span id="xpTxt"></span></div>
@@ -191,6 +198,7 @@ const BOSSES=[
  {n:'Shadow Titan',e:'👹',biome:'shadow',hp:3600,atk:58,r:115,spd:140,dna:90,coins:500,xp:700,sp:['ring','shards','charge','meteor'],col:'#4b2a7a'}];
 const BIOMES={forest:'Whispering Forest',ice:'Frozen Tundra',sea:'Abyssal Sea',lava:'Magma Fields',shadow:'Shadow Core'};
 const MODES={
+ tutorial:{n:'Tutorial',i:'🎓',d:'A 2-minute guided first match: move, eat, evolve, use abilities, fight.',w:2400,bots:0,food:350},
  solo:{n:'Solo Survival',i:'🌲',d:'A few rivals and a closing toxic storm. Survive as long as you can.',w:4200,bots:14,food:700,boss:70},
  arena:{n:'100-Player Arena',i:'⚔️',d:'You and 99 rivals. Eat, evolve, dominate the leaderboard.',w:7000,bots:99,food:1300,boss:100},
  team:{n:'Team vs Team',i:'🚩',d:'Blue vs Red. First team to 40 takedowns wins.',w:5000,bots:29,food:800,boss:120,goal:40,time:240},
@@ -323,7 +331,7 @@ const BIOME_C={forest:[.25,.25],ice:[.75,.25],sea:[.25,.75],lava:[.75,.75],shado
 function recalc(c){
  if(c.boss){const d=c.boss;c.maxhp=d.hp;c.atk=d.atk;c.spd=d.spd;c.r=d.r;return}
  const s=c.stage,m=1+.03*(c.mastery||0);
- c.maxhp=(50+s*38)*m*(c.mut==='giant'?1.25:1);c.atk=(10+s*6.5)*m;c.spd=(170+s*10)*(c.mut==='swift'?1.15:1);c.r=14+s*3.8}
+ c.maxhp=(50+s*38)*m*(c.mut==='giant'?1.25:1);c.atk=(10+s*6.5)*m;c.spd=(200+s*4)*(c.mut==='swift'?1.15:1);c.r=14+s*3.8}
 function mkCre(o){
  const c=Object.assign({id:++uid,x:0,y:0,vx:0,vy:0,kx:0,ky:0,wx:0,wy:0,stage:0,xp:0,totalXp:0,team:0,bot:true,name:'?',kills:0,fx:{},cd:{},mut:'',mastery:0,
   dead:false,boss:null,hitT:0,last:null,lastT:-99,emote:null,dash:null,bold:.3+Math.random()*.7,pdmg:0,sp:5,
@@ -331,11 +339,12 @@ function mkCre(o){
  recalc(c);c.hp=c.maxhp;return c}
 function botSkin(){const h=Math.floor(Math.random()*360);return{c1:`hsl(${h},75%,64%)`,c2:`hsl(${(h+35)%360},70%,38%)`,pat:['solid','solid','stripes','dots','ring'][Math.floor(Math.random()*5)]}}
 function randPos(team){const W=G.W,m=200;let x=rr(m,W-m),y=rr(m,W-m);if(team===1)x=rr(m,W*.2);else if(team===2)x=rr(W*.8,W-m);return{x,y}}
+function safePos(team){let best=null,bd=-1;for(let i=0;i<30;i++){const q=randPos(team);let m=1e9;for(const c of G.cre){if(c.dead||(c.stage<1&&!c.boss))continue;m=Math.min(m,Math.hypot(c.x-q.x,c.y-q.y))}if(m>bd){bd=m;best=q}}return best}
 function cellIdx(x,y){const cx=clamp(Math.floor(x/CELL),0,G.ncx-1),cy=clamp(Math.floor(y/CELL),0,G.ncx-1);return cy*G.ncx+cx}
 const FCOL=['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#c77dff','#ff9f1c','#2ec4b6'];
 function addFood(x,y,v,tmp){const f={x,y,v,tmp:!!tmp,r:v>=3?7:4.5,c:FCOL[Math.floor(RNG()*FCOL.length)]};f.cell=cellIdx(x,y);G.cells[f.cell].push(f);return f}
 function startGame(mode){
- initAudio();const D=MODES[mode];let seed=0;
+ initAudio();if(!M.tut&&mode!=='tutorial'){mode='tutorial';toast('Quick tutorial first — you can skip it.')}const D=MODES[mode];let seed=0;
  if(mode==='weekly'){seed=weekId();RNG=mulberry32(seed*7919+13)}else RNG=Math.random;
  const ev=curEvent();
  G={mode,D,ev,t:0,W:D.w,cre:[],proj:[],zones:[],rings:[],parts:[],txt:[],feed:[],eggs:[],resp:[],cells:[],ncx:Math.ceil(D.w/CELL),
@@ -350,18 +359,19 @@ function startGame(mode){
  RNG=Math.random;
  const p=mkCre({bot:false,name:M.settings.name||'You',team:botTeams?1:0,stage:mode==='rush'?7:0});
  p.skin=itemOf(M.eq.skin);p.mastery=masteryLv(p.stage);recalc(p);p.hp=p.maxhp;
- const pp=mode==='rush'?{x:D.w/2,y:D.w/2}:randPos(p.team);p.x=pp.x;p.y=pp.y;p.fx.shield=3;
+ const pp=mode==='rush'?{x:D.w/2,y:D.w/2}:safePos(p.team);p.x=pp.x;p.y=pp.y;p.fx.shield=5;
  G.p=p;G.cre.push(p);G.cam.x=p.x;G.cam.y=p.y;G.run.maxStage=p.stage+1;
+ if(mode==='tutorial'){G.tut={i:0,x0:p.x,y0:p.y};for(let i=0;i<4;i++){const d=spawnBot(0,true);d.stage=0;d.xp=0;d.totalXp=0;recalc(d);d.hp=d.maxhp;d.ai.dummy=true;d.name='Dummy';const a=i*1.57+.5;d.x=clamp(p.x+Math.cos(a)*rnd(380,620),100,G.W-100);d.y=clamp(p.y+Math.sin(a)*rnd(380,620),100,G.W-100)}$('tut').classList.remove('hide')}else $('tut').classList.add('hide');
  if(mode==='rush'){G.xpFreeze=false;for(let i=0;i<60;i++)addFood(rr(300,D.w-300),rr(300,D.w-300),3)}
- const hint=mode==='rush'?'Defeat all 5 bosses! Dodge the red warning rings.':isTouch?'Drag to move. Tap ⚡ to use abilities. Eat glowing food to evolve!':'WASD or hold the mouse to move. SPACE uses your ability. Eat glowing food to evolve!';
+ const hint=mode==='tutorial'?'':mode==='rush'?'Defeat all 5 bosses! Dodge the red warning rings.':isTouch?'Drag to move. Tap ⚡ to use abilities. Eat glowing food to evolve!':'WASD or hold the mouse to move. SPACE uses your ability. Eat glowing food to evolve!';
  setHint(hint,6500);
  $('menu').classList.remove('on');closeModal();$('dead').classList.remove('on');$('hud').classList.remove('hide');
  $('teamScore').textContent='';buildAbar();$('evoBanner').classList.remove('on');$('feed').innerHTML='';
  if(mode==='rush'){setBanner('👑 Boss Rush — get ready!',2500)}
  G.lastT=performance.now()}
 function spawnBot(team,initial){
- const g=G,r=Math.random();let st=r<.65?0:r<.85?1+Math.floor(Math.random()*2):2+Math.floor(Math.random()*3);
- if(initial)st=Math.floor(Math.random()*(g.mode==='solo'?4:7));
+ const g=G,r=Math.random();let st=r<.6?0:r<.85?1:r<.95?2:3;
+ if(initial){const q=Math.random();st=g.mode==='solo'?(q<.5?0:q<.8?1:2):(q<.5?0:q<.75?1:q<.88?2:q<.96?3:4)}
  const p=randPos(team);
  const c=mkCre({x:p.x,y:p.y,stage:st,team:team||0,name:NAMES[Math.floor(RNG()*NAMES.length)]+(Math.random()<.35?Math.floor(Math.random()*99):''),skin:botSkin(),bold:g.mode==='solo'?.2+Math.random()*.5:.3+Math.random()*.7});
  c.xp=NEED[st];c.totalXp=NEED[st]*1.3;recalc(c);c.hp=c.maxhp;c.ai.tx=c.x;c.ai.ty=c.y;if(!initial)c.fx.shield=2;g.cre.push(c);return c}
@@ -373,10 +383,11 @@ function spawnBoss(idx){
 const isEnemy=(a,b)=>a!==b&&!(a.team&&a.team===b.team)&&!(a.boss&&b.boss);
 function hit(src,dst,amt){
  if(dst.dead||amt<=0)return;if(dst.fx.shield>0)return;
+ if(dst===G.p&&dst.stage<2)amt*=.6;
  dst.hp-=amt;dst.hitT=.1;if(src){dst.last=src;dst.lastT=G.t;if(src.mut==='vamp')src.hp=Math.min(src.maxhp,src.hp+amt*.25);
   if(dst.mut==='spike'&&!src.boss){src.hp-=amt*.25;src.last=dst;src.lastT=G.t}
   if(src===G.p&&dst.boss)dst.pdmg+=amt}
- if(dst===G.p||src===G.p)sfx('hit')}
+ if(dst===G.p||src===G.p){sfx('hit');dst.acc=(dst.acc||0)+amt}}
 function addXp(c,n){if(c.boss||c.dead)return;if(c.mut==='gold')n*=1.25;if(!c.bot&&G.ev.xp)n*=G.ev.xp;c.xp+=n;c.totalXp+=n;while(c.stage<11&&c.xp>=NEED[c.stage+1])evolveC(c)}
 function evolveC(c){
  const ratio=c.hp/c.maxhp;c.stage++;
@@ -398,7 +409,7 @@ function die(c){
  if(c.boss)bossDead(c);
  if(c===g.p||(k===g.p&&!c.boss)||(c.boss))if(!c.boss)feed(c===g.p?(k?'💀 '+esc(k.name)+' defeated you':'💀 You died'):'⚔️ You defeated '+esc(c.name));
  if(c===g.p)playerDied(k);
- else if(!c.boss&&g.mode!=='rush')g.resp.push({t:g.t+2+Math.random()*3,team:c.team});
+ else if(!c.boss&&g.mode!=='rush'&&g.mode!=='tutorial')g.resp.push({t:g.t+2+Math.random()*3,team:c.team});
  if(!c.boss&&g.mode==='team'&&k&&k!==g.p&&k.team&&Math.random()<.1)feed((k.team===1?'🔵 ':'🔴 ')+esc(k.name)+' → '+esc(c.name))}
 function bossDead(c){
  const g=G,d=c.boss,p=g.p;
@@ -411,7 +422,7 @@ function playerDied(k){
  g.over=true;setTimeout(()=>finishRun(k),1100)}
 function respawnPlayer(){
  const g=G,p=g.p;p.dead=false;p.stage=Math.floor(p.stage/2);p.xp=NEED[p.stage];p.mastery=masteryLv(p.stage);recalc(p);p.hp=p.maxhp;p.fx={shield:3};p.cd={};p.last=null;
- const pp=randPos(p.team);p.x=pp.x;p.y=pp.y;p.vx=p.vy=0;p.dash=null;g.sel=p.stage;buildAbar();g.pResp=0}
+ const pp=safePos(p.team);p.x=pp.x;p.y=pp.y;p.vx=p.vy=0;p.dash=null;g.sel=p.stage;buildAbar();g.pResp=0}
 function floaty(x,y,t,c){G.txt.push({x,y,t:0,s:t,c:c||'#fff'})}
 function emote(c,e){c.emote={e,t:2}}
 function shock(c,R,dmg,stun,knock,col){
@@ -468,7 +479,7 @@ function think(c){
  if(f&&Math.random()<.85){ai.mode='food';ai.tx=f.x;ai.ty=f.y;return}
  ai.wt-=.3;if(ai.mode!=='wander'||ai.wt<=0||Math.hypot(ai.tx-c.x,ai.ty-c.y)<40){ai.mode='wander';ai.wt=3+Math.random()*3;ai.tx=clamp(c.x+rnd(-700,700),80,g.W-80);ai.ty=clamp(c.y+rnd(-700,700),80,g.W-80)}}
 function aiMove(c,dt){
- const ai=c.ai;ai.t-=dt;if(ai.t<=0)think(c);
+ const ai=c.ai;if(ai.dummy){c.wx=c.wy=0;return}ai.t-=dt;if(ai.t<=0)think(c);
  if(c.fx.fear>0&&c.fearX!==undefined){const dx=c.x-c.fearX,dy=c.y-c.fearY,d=Math.hypot(dx,dy)||1;c.wx=dx/d;c.wy=dy/d;return}
  const dx=ai.tx-c.x,dy=ai.ty-c.y,d=Math.hypot(dx,dy);
  if(d>8){const k=ai.mode==='flee'?1:.93;c.wx=dx/d*k;c.wy=dy/d*k}else{c.wx=0;c.wy=0}}
@@ -482,7 +493,7 @@ function bossAI(c,dt){
  if(c.sp<=0&&c.tgt&&!c.tgt.dead){c.sp=5+Math.random()*2;const sp=c.boss.sp[c.bossSpi=(c.bossSpi||0)+1>=c.boss.sp.length?0:(c.bossSpi||0)+1],a=Math.atan2(c.tgt.y-c.y,c.tgt.x-c.x);
   if(sp==='ring')g.rings.push({x:c.x,y:c.y,r:c.r*3.2,t:0,delay:1,dmg:38,own:c,col:'#ff4d4d'});
   else if(sp==='shards'){for(let i=0;i<12;i++)shoot(c,i/12*6.283+a,380,12,18,1.7,'ice')}
-  else if(sp==='charge'){c.dash={t:.8,vx:Math.cos(a)*720,vy:Math.sin(a)*720,dmg:40,set:new Set()}}
+  else if(sp==='charge'){c.windup={t:.8,a}}
   else if(sp==='meteor'){for(let i=0;i<5;i++)g.rings.push({x:c.tgt.x+rnd(-260,260),y:c.tgt.y+rnd(-260,260),r:105,t:0,delay:1.2,dmg:45,own:c,col:'#ff7a3d'})}}}
 /* ===================================================================== UPDATE */
 const keys={};
@@ -507,6 +518,7 @@ function update(dt){
  if(g.mode==='team'&&!g.over&&(g.score[1]>=g.D.goal||g.score[2]>=g.D.goal||g.t>=g.D.time)){g.over=true;setTimeout(()=>finishRun(null),1000)}
  if(g.mode==='weekly'&&!g.over&&g.t>=g.D.time){g.over=true;setTimeout(()=>finishRun(null),800)}
  if(g.pResp&&g.t>=g.pResp)respawnPlayer();
+ if(g.tut&&g.tut.i<4&&!p.dead){const T=g.tut;if(T.i===0&&Math.hypot(p.x-T.x0,p.y-T.y0)>350)T.i++;else if(T.i===1&&p.stage>=1)T.i++;else if(T.i===2&&g.run.abil>=1)T.i++;else if(T.i===3&&g.run.kills>=1){T.i++;sfx('win');g.run.coins+=M.tut?0:100;M.tut=1;save();setBanner('🎓 Tutorial complete!'+(g.run.coins?' +100 🪙':''),3500);setTimeout(()=>finishRun(null,true),3200)}if(T.i<4&&T.i>0&&T.i!==T.last){T.last=T.i;sfx('abil')}}
  /* input / ai */
  if(!p.dead&&!g.over)playerInput(p);else{p.wx=p.wy=0}
  for(const c of g.cre){if(c.dead)continue;if(c.boss)bossAI(c,dt);else if(c.bot)aiMove(c,dt)}
@@ -515,11 +527,13 @@ function update(dt){
   if(c.dead)continue;
   for(const k in c.fx){c.fx[k]-=dt;if(c.fx[k]<=0)delete c.fx[k]}
   for(const k in c.cd){c.cd[k]-=dt;if(c.cd[k]<=0)delete c.cd[k]}
+  if(c.acc>0){c.accT=(c.accT||0)-dt;if(c.accT<=0){floaty(c.x+rnd(-8,8),c.y-c.r,'-'+Math.max(1,Math.round(c.acc)),c===p?'#ff7b7b':'#fff');if(c===p&&c.acc>c.maxhp*.08)g.shake=Math.max(g.shake,5);c.acc=0;c.accT=.3}}
   if(c.hitT>0)c.hitT-=dt;if(c.emote){c.emote.t-=dt;if(c.emote.t<=0)c.emote=null}
   if(g.t-c.lastT>5&&c.hp<c.maxhp)c.hp=Math.min(c.maxhp,c.hp+c.maxhp*(c.boss?.01:.03)*dt);
   const bio=biomeAt(c.x,c.y);let sp=c.spd*(c.fx.speed?1.8:1)*(c.fx.slow?.5:1)*(bio==='sea'&&!c.boss?.85:1);
-  if(c.bot&&!c.boss)sp*=.93;
+  if(c.bot&&!c.boss)sp*=.9;
   let mx=c.wx,my=c.wy;if(c.fx.stun>0){mx=my=0}
+  if(c.windup){mx=my=0;c.windup.t-=dt;if(c.fx.stun>0)c.windup=null;else if(c.windup.t<=0){const a=c.windup.a;c.dash={t:.8,vx:Math.cos(a)*720,vy:Math.sin(a)*720,dmg:40,set:new Set()};c.windup=null}}
   if(c.dash){c.dash.t-=dt;c.vx=c.dash.vx;c.vy=c.dash.vy;
    if(c.dash.dmg>0)for(const o of g.cre){if(o.dead||!isEnemy(c,o)||c.dash.set.has(o.id))continue;if(Math.hypot(o.x-c.x,o.y-c.y)<o.r+c.r+6){c.dash.set.add(o.id);hit(c,o,c.dash.dmg);o.kx+=c.dash.vx*.3;o.ky+=c.dash.vy*.3;if(c.boss)o.fx.stun=Math.max(o.fx.stun||0,.4)}}
    if(c.dash.t<=0)c.dash=null}
@@ -627,6 +641,7 @@ function drawWorld(t){
  for(const r of g.rings){const k=clamp(r.t/r.delay,0,1);ctx.lineWidth=5;
   if(r.vis){ctx.strokeStyle=r.col;ctx.globalAlpha=1-k;ctx.beginPath();ctx.arc(r.x,r.y,r.r*k,0,6.283);ctx.stroke();ctx.globalAlpha=1}
   else{ctx.fillStyle=r.col+'22';ctx.strokeStyle=r.col;ctx.beginPath();ctx.arc(r.x,r.y,r.r,0,6.283);ctx.fill();ctx.stroke();ctx.fillStyle=r.col+'66';ctx.beginPath();ctx.arc(r.x,r.y,r.r*k,0,6.283);ctx.fill()}}
+ for(const b of g.cre){if(b.dead||!b.windup)continue;ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.windup.a);const k=1-b.windup.t/.8;ctx.fillStyle='#ff4d4d'+(k>.7?'55':'33');ctx.fillRect(0,-b.r,576,b.r*2);ctx.fillStyle='#ff4d4d66';ctx.fillRect(0,-b.r,576*k,b.r*2);ctx.restore()}
  /* creatures (small first) */
  const vis=g.cre.filter(c=>!c.dead&&c.x>vx0-c.r-80&&c.x<vx1+c.r+80&&c.y>vy0-c.r-80&&c.y<vy1+c.r+80).sort((a,b)=>a.r-b.r);
  const p=g.p;
@@ -642,6 +657,8 @@ function drawWorld(t){
  ctx.setTransform(DPR,0,0,DPR,0,0);
  for(const b of g.cre){if(!b.boss||b.dead)continue;const sx=(b.x-cx)*z+SW/2,sy=(b.y-cy)*z+SH/2;
   if(sx<20||sx>SW-20||sy<20||sy>SH-20){const a=Math.atan2(sy-SH/2,sx-SW/2),ex=clamp(SW/2+Math.cos(a)*SW,40,SW-40),ey=clamp(SH/2+Math.sin(a)*SH,60,SH-110);ctx.save();ctx.translate(ex,ey);ctx.fillStyle='#ff4d4dcc';ctx.beginPath();ctx.arc(0,0,22,0,6.283);ctx.fill();ctx.rotate(a);ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(30,0);ctx.lineTo(18,-8);ctx.lineTo(18,8);ctx.fill();ctx.rotate(-a);ctx.font='22px "Apple Color Emoji","Noto Color Emoji",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(b.boss.e,0,1);ctx.restore()}}
+ if(g.tut&&g.tut.i<4&&!g.p.dead&&(g.tut.i===1||g.tut.i===3)){let tg=null;if(g.tut.i===1)tg=nearestFood(g.p,900);else{let bd=1e9;for(const o of g.cre)if(!o.dead&&o!==g.p){const d=Math.hypot(o.x-g.p.x,o.y-g.p.y);if(d<bd){bd=d;tg=o}}}
+  if(tg){const a=Math.atan2(tg.y-g.p.y,tg.x-g.p.x),d=g.p.r*z+46+Math.sin(g.t*8)*4;ctx.save();ctx.translate(SW/2+Math.cos(a)*d,SH/2+Math.sin(a)*d);ctx.rotate(a);ctx.fillStyle='#ffd23f';ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(-8,-10);ctx.lineTo(-8,10);ctx.fill();ctx.restore()}}
  if(g.joy){ctx.strokeStyle='#fff6';ctx.lineWidth=3;ctx.beginPath();ctx.arc(g.joy.ox,g.joy.oy,50,0,6.283);ctx.stroke();ctx.fillStyle='#fff5';const dx=g.joy.x-g.joy.ox,dy=g.joy.y-g.joy.oy,d=Math.min(50,Math.hypot(dx,dy)),a=Math.atan2(dy,dx);ctx.beginPath();ctx.arc(g.joy.ox+Math.cos(a)*d,g.joy.oy+Math.sin(a)*d,22,0,6.283);ctx.fill()}}
 function drawMini(){
  const g=G,s=260,k=s/g.W;mctx.clearRect(0,0,s,s);
@@ -683,6 +700,8 @@ function hudTick(){
  else if(g.mode==='weekly')$('timer').textContent='🏆 '+fmt(g.D.time-g.t);
  else if(g.mode==='rush'){$('teamScore').textContent=`👑 Bosses ${g.rushDone}/5`;$('timer').textContent=fmt(g.t)}
  else{$('teamScore').textContent='';$('timer').textContent=fmt(g.t)+(g.mode==='solo'?'  ☣️ storm closing':'')}
+ if(g.tut){const L=['Move: WASD / arrows, hold the mouse, or drag','Eat glowing food until the XP bar fills and you evolve','Press SPACE (or tap ⚡) to use your new ability','Touch a Dummy to bite it. Defeat one'];$('tut').innerHTML='<b>🎓 Tutorial</b>'+L.map((t,i)=>`<div class="${i<g.tut.i?'ok':i===g.tut.i?'cur':''}">${i<g.tut.i?'✔':i===g.tut.i?'▶':'·'} ${t}</div>`).join('')+'<button onclick="skipTut()">Skip tutorial</button>'}
+ const hr=p.hp/p.maxhp,vg=$('vig');vg.style.opacity=hr<.3&&!p.dead?String(clamp(.9-hr*2.4,.2,.9)):'0';vg.classList.toggle('on',hr<.3&&!p.dead)
  if(g.pResp)$('hint').textContent='Respawning in '+Math.max(0,Math.ceil(g.pResp-g.t))+'…'}
 const fmt=s=>{s=Math.max(0,Math.floor(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
 /* ===================================================================== RUN END */
@@ -694,8 +713,9 @@ function finishRun(killer,quit){
  if(mode==='team'){won=g.score[1]>g.score[2];title=won?'🏆 Blue team wins!':g.score[1]===g.score[2]?'Draw':'Red team wins';total=1;rank=won?1:5}
  else if(mode==='rush'){won=g.rushWin;title=won?'👑 Boss Rush complete!':'Defeated by '+(killer?esc(killer.name):'the arena')}
  else if(mode==='weekly'){const R=mulberry32(weekId()*31+7),rivals=[];for(let i=0;i<25;i++)rivals.push(Math.round(300+R()*R()*2600));rank=1+rivals.filter(s=>s>score).length;total=26;title='🏆 Tournament over'}
+ else if(mode==='tutorial'){won=true;title='🎓 Tutorial complete!'}
  else title=killer?'Defeated by '+esc(killer.name):(p.dead?'You died':'Run ended');
- const doneTitle=p.dead||mode==='weekly'||mode==='team'||won?title:'Run ended';
+ const doneTitle=p.dead||mode==='weekly'||mode==='team'||mode==='tutorial'||won?title:'Run ended';
  let coins=Math.round(rxp*.25+r.kills*6+r.time/5)+r.coins+(won?(mode==='rush'?400:mode==='team'?120:0):0);
  let trophy=0;if(mode==='arena'||mode==='solo'||mode==='weekly'||mode==='team'){trophy=won?25:rank<=3?30:rank<=10?15:rank<=25?5:-3;if(mode==='solo'&&rank<=1)trophy=30}
  const dna=Math.round(r.dna),accXp=Math.round(rxp*.6+r.kills*10+r.bosses*80+(won?100:0));
@@ -714,18 +734,19 @@ function finishRun(killer,quit){
  <div><span>🪙 Coins</span><b>+${coins}</b></div><div><span>🧬 DNA shards</span><b>+${dna}</b></div><div><span>Account XP</span><b>+${accXp}</b></div><div><span>Ladder</span><b>${tr.e} ${trophy>=0?'+':''}${trophy}</b></div></div>
  ${mode==='weekly'?`<div class="mut">Weekly best: ${M.weekly.best} pts</div>`:''}
  ${done.length?'<div style="color:#5be584">✅ Quest complete: '+done.join(', ')+' — claim in Quests</div>':''}${newAch.length?'<div style="color:#ffd23f">🏅 Achievement: '+newAch.join(', ')+'</div>':''}
- <div class="btns">${(mode!=='weekly'&&!won&&p.dead&&!g.revived&&mode!=='team')?'<button class="grn" onclick="watchAd()">▶ Revive (watch ad — demo)</button>':''}<button class="pri" onclick="startGame(\'${mode}\')">Play again</button><button onclick="shareRun(${score},${r.maxStage})">📤 Share</button><button onclick="toMenu()">Menu</button></div>`;
+ <div class="btns">${(mode!=='weekly'&&!won&&p.dead&&!g.revived&&mode!=='team')?'<button class="grn" onclick="watchAd()">▶ Revive (watch ad — demo)</button>':''}<button class="pri" onclick="startGame(\'${mode==='tutorial'?'solo':mode}\')">${mode==='tutorial'?'Play Solo Survival':'Play again'}</button><button onclick="shareRun(${score},${r.maxStage})">📤 Share</button><button onclick="toMenu()">Menu</button></div>`;
  $('dead').classList.add('on');if(won)sfx('win')}
 function shareRun(sc,ms){share(`I scored ${sc} in Evolution Arena and evolved into a ${STAGES[ms-1].e} ${STAGES[ms-1].n}! Beat that.`)}
 function checkAch(){const out=[];for(const a of ACH){if(!M.ach[a.id]&&a.c(M.stats)){M.ach[a.id]=1;give(a.r);out.push(a.n+' ('+rTxt(a.r)+')')}}return out}
 function quitRun(){$('pause').classList.remove('on');if(G){G.paused=false;if(!G.ended){G.p.dead=true;finishRun(null,true)}}}
-function toMenu(){$('dead').classList.remove('on');$('hud').classList.add('hide');$('pause').classList.remove('on');G=null;renderMenu();$('menu').classList.add('on')}
+function toMenu(){$('vig').style.opacity='0';$('vig').classList.remove('on');$('dead').classList.remove('on');$('hud').classList.add('hide');$('pause').classList.remove('on');G=null;renderMenu();$('menu').classList.add('on')}
 let adT=null;
 function watchAd(){let n=5;$('adCount').textContent=n;$('ad').classList.add('on');adT=setInterval(()=>{n--;$('adCount').textContent=n;if(n<=0){clearInterval(adT);adT=null;$('ad').classList.remove('on');reviveNow()}},1000)}
 function cancelAd(){clearInterval(adT);adT=null;$('ad').classList.remove('on')}
-function reviveNow(){const g=G;if(!g)return;const p=g.p;g.revived=true;g.over=false;g.ended=false;p.dead=false;p.hp=p.maxhp*.6;p.fx={shield:3};p.cd={};p.last=null;p.dash=null;p.vx=p.vy=0;const pp=randPos(p.team);p.x=pp.x;p.y=pp.y;
+function reviveNow(){const g=G;if(!g)return;const p=g.p;g.revived=true;g.over=false;g.ended=false;p.dead=false;p.hp=p.maxhp*.6;p.fx={shield:3};p.cd={};p.last=null;p.dash=null;p.vx=p.vy=0;const pp=safePos(p.team);p.x=pp.x;p.y=pp.y;
  if(!g.cre.includes(p))g.cre.push(p);$('dead').classList.remove('on');g.cam.x=p.x;g.cam.y=p.y;buildAbar();setHint('Revived! Make it count.',3000);
  g.revivedRun=true;g.xpBase=p.totalXp;const o=g.run;g.run={food:0,kills:0,evolves:0,bosses:0,eggs:0,abil:0,maxStage:p.stage+1,time:0,dna:0,coins:0,stageT:{},killsAt:{},muts:0};g.t0=g.t;g.resultDone=false}
+function skipTut(){M.tut=1;save();toMenu()}
 function pauseGame(on){if(!G||G.ended)return;G.paused=on;$('pause').classList.toggle('on',on);if(!on)G.lastT=performance.now()}
 /* ===================================================================== MENU / MODALS */
 function renderMenu(){
@@ -742,7 +763,7 @@ function closeModal(){$('modal').classList.remove('on')}
 function pBtn(p){return Object.keys(p).map(k=>({coins:'🪙',dna:'🧬',gems:'💎'}[k])+p[k]).join(' ')}
 function canPay(p){return Object.keys(p).every(k=>M[k]>=p[k])}
 function openDex(){
- openModal('<h2>🧬 Evolution Dex</h2><p class="mut">Every evolution raises speed and health and adds one new active ability. Play as a species to raise its mastery (★, up to +30% health &amp; damage).</p><div class="grid">'+STAGES.map((s,i)=>{const a=AB[s.ab],ml=masteryLv(i);return`<div class="it"><div class="pv em">${s.e}</div><b>${i+1}. ${s.n}</b><br><small>HP ${Math.round(50+i*38)} · DMG ${Math.round(10+i*6.5)} · SPD ${170+i*10}</small><br><small>${a.i} ${a.n}</small><br><small>${a.d}</small><br><small>Mastery ★${ml}${ml<10?' ('+(M.mast[i]||0)+'/'+Math.ceil(15*(ml+1)*(ml+1))+')':' MAX'}</small></div>`}).join('')+'</div><h3>Bosses</h3><div class="grid">'+BOSSES.map(b=>`<div class="it"><div class="pv em">${b.e}</div><b>${b.n}</b><br><small>${BIOMES[b.biome]}</small><br><small>HP ${b.hp} · reward 🧬${b.dna}</small></div>`).join('')+'</div><h3>Rare mutations (7% on evolve)</h3><div class="grid">'+Object.values(MUTS).map(m=>`<div class="it"><div class="pv em">${m.e}</div><b>${m.n}</b><br><small>${m.d}</small></div>`).join('')+'</div>')}
+ openModal('<h2>🧬 Evolution Dex</h2><p class="mut">Every evolution raises speed and health and adds one new active ability. Play as a species to raise its mastery (★, up to +30% health &amp; damage).</p><div class="grid">'+STAGES.map((s,i)=>{const a=AB[s.ab],ml=masteryLv(i);return`<div class="it"><div class="pv em">${s.e}</div><b>${i+1}. ${s.n}</b><br><small>HP ${Math.round(50+i*38)} · DMG ${Math.round(10+i*6.5)} · SPD ${200+i*4}</small><br><small>${a.i} ${a.n}</small><br><small>${a.d}</small><br><small>Mastery ★${ml}${ml<10?' ('+(M.mast[i]||0)+'/'+Math.ceil(15*(ml+1)*(ml+1))+')':' MAX'}</small></div>`}).join('')+'</div><h3>Bosses</h3><div class="grid">'+BOSSES.map(b=>`<div class="it"><div class="pv em">${b.e}</div><b>${b.n}</b><br><small>${BIOMES[b.biome]}</small><br><small>HP ${b.hp} · reward 🧬${b.dna}</small></div>`).join('')+'</div><h3>Rare mutations (7% on evolve)</h3><div class="grid">'+Object.values(MUTS).map(m=>`<div class="it"><div class="pv em">${m.e}</div><b>${m.n}</b><br><small>${m.d}</small></div>`).join('')+'</div>')}
 let shopTab='skin';
 function openShop(tab){shopTab=tab||shopTab;const T={skin:'Skins',pet:'Pets',emote:'Emotes',plate:'Nameplates',trail:'Trails'};
  const ids=Object.keys(ITEMS).filter(id=>ITEMS[id].t===shopTab);for(const id of M.own[shopTab])if(id.indexOf('s_ss_')===0&&ids.indexOf(id)<0)ids.push(id);

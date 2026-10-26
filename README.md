@@ -6,7 +6,7 @@ A browser game. Hatch as an egg, eat, and evolve through 12 creatures (Egg, Ant,
 Open `index.html` in a browser. No build step and no dependencies. To host it, enable GitHub Pages for this repo.
 
 ## Modes
-Solo Survival, 100-Player Arena, Team vs Team, Boss Rush, Weekly Tournament.
+Tutorial (played automatically the first time), Solo Survival, 100-Player Arena, Team vs Team, Boss Rush, Weekly Tournament.
 
 ## Controls
 | Action | Keys |
