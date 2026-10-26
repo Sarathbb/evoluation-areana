@@ -1,0 +1,12 @@
+# One-click deploy on Render: serves the game AND the multiplayer server from the same address.
+services:
+  - type: web
+    name: evolution-arena
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm install
+    startCommand: node server/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: MAX_PLAYERS
+        value: "30"

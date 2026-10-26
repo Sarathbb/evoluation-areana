@@ -1,0 +1,10 @@
+{
+  "name": "evolution-arena-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Authoritative multiplayer server for Evolution Arena. Runs the game's own simulation headlessly.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" }
+}
