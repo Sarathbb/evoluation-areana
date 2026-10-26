@@ -96,6 +96,8 @@ table{width:100%;border-collapse:collapse}td,th{padding:5px 8px;text-align:left;
 #abar button s{position:absolute;left:0;bottom:0;width:100%;height:0;background:#000b}
 #fireBtn{position:absolute;right:16px;bottom:74px;width:76px;height:76px;border-radius:50%;font-size:32px;background:#ffa51fcc;display:none}
 .touch #fireBtn{display:block}
+#netStat{position:absolute;left:10px;bottom:10px;font-size:11px;color:#9fb0d6;text-shadow:0 1px 2px #000;pointer-events:none}
+#netStat.bad{color:#ff8a8a;font-weight:700}
 #toasts{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:60;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
 #toasts div{background:#101a33f0;border:1px solid var(--acc);border-radius:10px;padding:7px 14px;animation:tin .25s;font-size:14px}
 @keyframes tin{from{opacity:0;transform:translateY(-8px)}}
@@ -130,6 +132,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:5px 8px;text-align:left;
   <div id="banner"></div>
   <div id="hint"></div>
   <div id="evoBanner"></div>
+  <div id="netStat" class="hide"></div>
   <div id="abar"></div>
   <button id="fireBtn">⚡</button>
 </div>
@@ -1044,7 +1047,7 @@ function share(text){const url=location.href.split('#')[0],data={title:'Evolutio
  if(navigator.share)navigator.share(data).catch(()=>{});
  else if(navigator.clipboard)navigator.clipboard.writeText(text+' '+url).then(()=>toast('Copied! Paste it anywhere to share.'),()=>toast(text));else toast(text)}
 function hudTick(){
- const g=G,p=g.p,st=STAGES[p.stage];
+ const g=G,p=g.p,st=STAGES[p.stage];netStatTick();
  const hk=p.stage+'|'+p.mastery;if(g.hk!==hk){g.hk=hk;$('stName').innerHTML=`<img src="${spriteURL(p.stage)}" alt=""> ${st.n}  (Lv ${p.stage+1}/12)`+(p.mastery?`  ★${p.mastery}`:'')}
  const lo=NEED[p.stage],hi=p.stage<11?NEED[p.stage+1]:NEED[11],pr=p.stage<11?(p.xp-lo)/(hi-lo):1;
  $('xpFill').style.width=clamp(pr*100,0,100)+'%';$('xpTxt').textContent=p.stage<11?`XP ${Math.floor(p.xp)} / ${hi}`:`MAX — ${Math.floor(p.totalXp)} score`;
@@ -1190,14 +1193,15 @@ function startOnline(){
  if(!url){toast('Set your multiplayer server address in Settings first.');openSettings();return}
  closeModal();netClose();toast('Connecting to the arena…');
  let ws;try{ws=new WebSocket(url)}catch(e){toast('That server address is not valid');return}
- const n={ws,url,joined:false,lastSend:0,lastMsg:''};NET=n;
+ const n={ws,url,joined:false,lastSend:0,lastMsg:'',snaps:0,rate:0,rateT:performance.now(),ping:0,sv:0,lastSnap:performance.now(),pingT:0};NET=n;
  ws.onopen=()=>{const sk=itemOf(M.eq.skin),pl=itemOf(M.eq.plate);ws.send(JSON.stringify({t:'join',name:M.settings.name||'Player',skin:{c1:sk.c1,c2:sk.c2,pat:sk.pat,n:sk.n},plate:pl&&pl.fg?{c1:pl.c1,c2:pl.c2,fg:pl.fg}:null}))};
  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch(_){return}netMsg(m)};
  ws.onerror=()=>{if(!n.joined)toast('Could not reach the server at '+url)};
  ws.onclose=()=>{if(NET===n){NET=null;if(G&&G.online&&!G.ended){toast('Disconnected from the server');toMenu()}}}}
 function netMsg(m){
  if(m.t==='w'){NET.joined=true;buildNetGame(m)}
- else if(m.t==='s'){if(G&&G.online)netSnap(m)}
+ else if(m.t==='s'){if(G&&G.online){NET.snaps++;NET.lastSnap=performance.now();NET.sv=m.sv||0;netSnap(m)}}
+ else if(m.t==='pong'){NET.ping=Math.round(performance.now()-m.ts)}
  else if(m.t==='dead')netDead(m);
  else if(m.t==='full'){toast('The server is full ('+m.max+' players). Try again in a moment.');netClose()}}
 function buildNetGame(w){
@@ -1206,7 +1210,7 @@ function buildNetGame(w){
   cam:{x:w.W/2,y:w.W/2,z:1},shake:0,paused:false,over:false,ended:false,sel:0,score:{1:0,2:0},nextBoss:0,hudT:0,lbT:0,lb:[],mm:[],evt:null,
   mouse:{x:0,y:0,down:false},joy:null,aimA:0,trailT:0,revived:false,run:newRun(),
   haz:w.haz.map(a=>({k:a[0],x:a[1],y:a[2],r:a[3],s:a[4],warn:false,cd:9})),
-  net:{by:{},meta:{},myId:w.id,prevStage:0,prevMut:'',prevKills:0,prevFd:0,prevHp:1}};
+  net:{by:{},meta:{},myId:w.id,prevStage:0,prevMut:'',prevKills:0,prevFd:0,prevHp:1,lastSend:0,lastMsg:''}};
  for(let i=0;i<G.ncx*G.ncx;i++){G.cells.push([]);G.cver.push(0)}
  genDeco();RNG=Math.random;
  G.p={id:w.id,x:w.W/2,y:w.W/2,r:14,stage:0,hp:50,maxhp:50,xp:0,totalXp:0,fx:{},cd:{},mut:'',mastery:0,name:M.settings.name||'Player',team:0,dead:false,vx:0,vy:0,ang:0,ph:0,skin:itemOf(M.eq.skin),bot:false,boss:null,kills:0,wx:0,wy:0,aimA:0,run:G.run,hitT:0,atkT:0,dash:null,windup:null,emote:null,tx:w.W/2,ty:w.W/2};
@@ -1254,12 +1258,26 @@ function netEvents(list){
   case'ab':{const c=g.net.by[e[1]];if(c)abSfx(c,e[2]);break}
   case'bn':setBanner(e[1],e[2]);break;
   case'fd':feed(e[1]);break}}}
+function netStatTick(){
+ const n=NET,el=$('netStat');if(!n||!G||!G.online){el.classList.add('hide');return}
+ const now=performance.now();if(now-n.rateT>=1000){n.rate=Math.round(n.snaps*1000/(now-n.rateT));n.snaps=0;n.rateT=now}
+ if(now-n.pingT>2000){n.pingT=now;netSend({t:'ping',ts:now})}
+ const stale=now-n.lastSnap>2500,bad=stale||n.rate<8||n.sv>45||n.ping>350;
+ el.classList.remove('hide');el.classList.toggle('bad',bad);
+ el.textContent=stale?'Waiting for the server…':`ping ${n.ping}ms · ${n.rate} updates/s · server ${n.sv}ms`+(n.sv>45?' (server overloaded)':'')}
 function netStep(dt){
  const g=G,p=g.p;g.t+=dt;
  if(!p.dead){playerInput(p);const now=performance.now(),n=g.net;
   if(now-n.lastSend>50){const msg=JSON.stringify({t:'in',x:Math.round(p.wx*100)/100,y:Math.round(p.wy*100)/100,a:Math.round(p.aimA*100)/100});if(msg!==n.lastMsg||now-n.lastSend>400){netSend(JSON.parse(msg));n.lastMsg=msg;n.lastSend=now}}}
  const k=Math.min(1,dt*14);
- for(const c of g.cre){c.x+=(c.tx-c.x)*k;c.y+=(c.ty-c.y)*k;c.tx+=c.vx*dt;c.ty+=c.vy*dt;const sp2=Math.hypot(c.vx,c.vy);if(sp2>25)c.ang=lerpAng(c.ang,Math.atan2(c.vy,c.vx),Math.min(1,dt*(c.boss?4:9)));c.ph+=sp2*dt*.028}
+ for(const c of g.cre){
+  if(c===p&&!p.dead&&!p.dash&&!p.windup){/* predict your own movement so it responds instantly; the server position gently corrects it */
+   const sp=(200+p.stage*4)*(p.mut==='swift'?1.15:1)*(p.fx.speed?1.8:1)*(p.fx.slow?.5:1)*(p.fx.stun?0:1),kk=Math.min(1,dt*9);
+   c.pvx=(c.pvx||0)+(p.wx*sp-(c.pvx||0))*kk;c.pvy=(c.pvy||0)+(p.wy*sp-(c.pvy||0))*kk;
+   c.tx+=c.vx*dt;c.ty+=c.vy*dt;c.x+=c.pvx*dt;c.y+=c.pvy*dt;const cr=Math.min(1,dt*3.5);c.x+=(c.tx-c.x)*cr;c.y+=(c.ty-c.y)*cr;
+   const sp2=Math.hypot(c.pvx,c.pvy);if(sp2>25)c.ang=lerpAng(c.ang,Math.atan2(c.pvy,c.pvx),Math.min(1,dt*9));c.ph+=sp2*dt*.028;continue}
+  c.pvx=c.vx;c.pvy=c.vy;
+  c.x+=(c.tx-c.x)*k;c.y+=(c.ty-c.y)*k;c.tx+=c.vx*dt;c.ty+=c.vy*dt;const sp2=Math.hypot(c.vx,c.vy);if(sp2>25)c.ang=lerpAng(c.ang,Math.atan2(c.vy,c.vx),Math.min(1,dt*(c.boss?4:9)));c.ph+=sp2*dt*.028}
  for(const q of g.proj){q.x+=q.vx*dt;q.y+=q.vy*dt;q.life-=dt}
  for(const z of g.zones)z.life-=dt;
  for(const r of g.rings)r.t+=dt;

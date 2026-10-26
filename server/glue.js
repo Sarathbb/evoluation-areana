@@ -19,6 +19,7 @@ startGame('arena');
 const ghost=G.p;G.cre=G.cre.filter(c=>c!==ghost);ghost.dead=true;ghost.name='ghost';
 G.online=true;G.t0=0;G.seed=Math.floor(Math.random()*1e9);
 RNG=mulberry32(G.seed);genDeco();RNG=Math.random;
+{const extra=G.cre.filter(c=>c.bot&&!c.boss).slice(__cfg.bots||60);for(const c of extra)c.dead=true;G.cre=G.cre.filter(c=>!c.dead)}
 const PL={};
 const COL=/^(#[0-9a-fA-F]{3,8}|hsla?\([0-9., %]+\)|rgba?\([0-9., %]+\))$/;
 const PATS=['solid','stripes','dots','ring','glow'];
@@ -41,7 +42,7 @@ function info(c,k){const alive=G.cre.filter(o=>!o.boss&&!o.dead&&o!==c);
 function retire(id){const c=PL[id];if(!c)return null;c.run.time=G.t-(G.t0||0);const d=info(c,null);d.left=true;c.dead=true;G.cre=G.cre.filter(o=>o!==c);delete PL[id];return d}
 function leave(id){const c=PL[id];if(!c)return;c.dead=true;G.cre=G.cre.filter(o=>o!==c);delete PL[id]}
 let bf=0;
-function botFill(){if(++bf<30)return;bf=0;const hs=humans().length,target=Math.max(20,100-hs),bots=G.cre.filter(c=>c.bot&&!c.boss&&!c.dead);
+function botFill(){if(++bf<30)return;bf=0;const hs=humans().length,target=Math.max(15,(__cfg.bots||60)-hs),bots=G.cre.filter(c=>c.bot&&!c.boss&&!c.dead);
  if(bots.length>target){bots.sort((a,b)=>a.stage-b.stage);for(let i=0;i<bots.length-target;i++)bots[i].dead=true;G.cre=G.cre.filter(c=>!c.dead)}
  else if(bots.length<target)for(let i=0;i<Math.min(3,target-bots.length);i++)spawnBot(0)}
 function tick(dt){
