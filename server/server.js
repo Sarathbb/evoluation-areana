@@ -57,6 +57,7 @@ setInterval(()=>{for(const st of players.values())if(!st.alive){st.ws.terminate(
 
 let tickN=0,slow=0;
 setInterval(()=>{
+ if(players.size===0)return; /* nobody connected: pause the world so an idle server costs no CPU */
  const t0=process.hrtime.bigint();
  let deaths;try{deaths=api.tick(1/TICK)}catch(e){console.error('tick error',e);return}
  for(const d of deaths){const st=players.get(d.id);if(st){send(st,Object.assign({t:'dead'},d));players.delete(d.id);st.id=0;st.known.clear();st.cv={}}}
