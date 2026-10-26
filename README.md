@@ -17,5 +17,9 @@ Tutorial (played automatically the first time), Solo Survival, 100-Player Arena,
 | Emotes | Z X C V |
 | Pause | Esc |
 
+## Bosses, hazards and events
+Ten world bosses, each with its own attacks: Forest Guardian, Ice Mammoth, Sea Serpent, Lava Dragon, Shadow Titan, Swamp Hydra, Thunder Roc, Magma Golem, Abyssal Kraken, Void Devourer. Boss Rush runs all ten.
+Map hazards: thorn patches, ice slicks, geysers, lava vents and healing springs. Every 70-100 seconds a world event hits (lightning storm, meteor shower, blizzard).
+
 ## Notes
 Progress saves in the browser. There is no server, so rivals, clans, friends and leaderboards are simulated locally, and the revive ad is a placeholder.
